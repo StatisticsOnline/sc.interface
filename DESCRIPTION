@@ -1,0 +1,21 @@
+Package: sc.interface
+Title: Common Interface to Synthetic Control Implementations
+Version: 0.1.0
+Authors@R: 
+    person("Collin", "Cademartori", , "cademac@wfu.edu", role = c("aut", "cre"))
+Description: Provides a uniform interface for fitting synthetic control models using various backend implementations. Supports the gsynth and bpCausal packages, as well as a custom Bayesian synthetic control model implemented in Stan.
+License: MIT
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.3.2
+Imports: 
+    bpCausal,
+    cmdstanr,
+    dplyr,
+    gsynth,
+    haven,
+    posterior,
+    tidyselect
+Remotes:
+    liulch/bpCausal
+SystemRequirements: CmdStan
