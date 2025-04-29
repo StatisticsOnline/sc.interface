@@ -17,14 +17,13 @@ run_sc <- function(
 ) {
 
   data[, panel_index[1]] <- as.factor(data[, panel_index[1]])
-  # data[data$country == "Australia", "D"] <- data[data$country == "West Germany", "D"]
 
   do_st <- "st" %in% backends
   do_gs <- "gs" %in% backends
   do_bp <- "bp" %in% backends
 
   if (do_gs) {
-    gs_fit <- gsynth::gsynth(
+    gs_inf <- gsynth::gsynth(
       Y = response,
       X = covars,
       D = treated_index,
@@ -36,13 +35,6 @@ run_sc <- function(
       CV = TRUE,
       inference = "parametric",
       nboots = 2000
-    )
-
-    gs_inf <- list(
-      Y.ct = gs_fit$Y.ct,
-      Eff = gs_fit$est.ind[, 1, ],
-      SE = gs_fit$est.ind[, 2, ],
-      out = gs_fit
     )
   } else {
     gs_inf <- NULL
@@ -102,7 +94,15 @@ run_sc <- function(
   ))  
 }
 
-summarize_gs <- function(fit, stats = c("y.ct", "eff", "err"), format = "long") {
+#' @export 
+summarize <- function(fits) {
+
+}
+
+summarize_gs <- function(
+  fit,
+  stats = c("y.ct", "eff", "err"),
+  format = "long") {
 
   stat_funs <- list(
     "y.ct" = function(fit) fit$Y.ct,
@@ -120,6 +120,30 @@ summarize_gs <- function(fit, stats = c("y.ct", "eff", "err"), format = "long") 
   }
 
   return(sum)
+}
+
+intervals_gs <- function(fit, level) {
+  qlb <- (1 - level) / 2
+  qub <- 1 - qlb
+
+  qln <- paste0(round(100 * qlb, 1), "%")
+  qun <- paste0(round(100 * qub, 1), "%")
+
+  ests <- abind::adrop(fit$est.ind[, 1, , drop = FALSE], drop = 2)
+  ses <- abind::adrop(fit$est.ind[, 2, , drop = FALSE], drop = 2)
+
+  data <- abind::abind(ests, ses, along = 3)
+  dimnames(data)[[1]] <- seq(1, dim(data)[1])
+  dimnames(data)[[3]] <- c("est", "se")
+
+  data_long <- plyr::adply(data, c(1, 2), .id = c("time_index", "unit")) |>
+    dplyr::mutate(
+      {{qln}} := est - qnorm(qlb) * se,
+      {{qun}} := est + qnorm(qlb) * se
+    ) |> 
+    dplyr::select(!c(est, se))
+
+  return(data_long)
 }
 
 summarize_bp <- function(fit, stats = c("y.ct", "eff", "err"), format = "long") {
@@ -173,6 +197,25 @@ summarize_bp <- function(fit, stats = c("y.ct", "eff", "err"), format = "long") 
   return(sum)
 }
 
+intervals_bp <- function(fit, level) {
+  qlb <- (1 - level) / 2
+  qub <- 1 - qlb
+
+  qln <- paste0(round(100 * qlb, 1), "%")
+  qun <- paste0(round(100 * qub, 1), "%")
+
+  qs <- apply(
+    -1 * (fit$yct - as.numeric(fit$yo_t)), 1, 
+    function(y) quantile(y, c(qlb, qub))
+  )
+  qs_df <- data.frame(
+    qs[1, ], qs[2, ], fit$raw.id.tr, fit$time.tr
+  )
+  colnames(qs_df) <- c(qln, qun, "unit", "time")
+
+  return(qs_df)
+}
+
 summarize_stan <- function(fit, stats = c("y.ct", "eff", "err"), format = "long") {
   stan_draws <- posterior::merge_chains(fit$posterior$draws(
     c("effs", "treated_control")
@@ -197,4 +240,19 @@ summarize_stan <- function(fit, stats = c("y.ct", "eff", "err"), format = "long"
   }
 
   return(sum)
+}
+
+intervals_stan <- function(fit, level) {
+  qlb <- (1 - level) / 2
+  qub <- 1 - qlb
+
+  stan_draws <- posterior::merge_chains(fit$posterior$draws("effs"))
+  effs <- posterior::extract_variable_array(stan_draws, "effs")
+  qs_wide <- apply(
+    effs, c(3, 2),
+    function(eff) quantile(eff, c(qlb, qub))
+  )
+  qs <- plyr::adply(qs_wide, c(2, 3), .id = c("time_index", "unit"))
+
+  return(qs)
 }
