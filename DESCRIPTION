@@ -9,12 +9,15 @@ Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.3.2
 Imports: 
+    abind,
     bpCausal,
     cmdstanr,
     dplyr,
     gsynth,
     haven,
+    plyr,
     posterior,
+    tidyr,
     tidyselect
 Remotes:
     liulch/bpCausal

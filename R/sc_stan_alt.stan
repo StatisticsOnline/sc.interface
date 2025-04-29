@@ -179,6 +179,24 @@ transformed data {
     Y_obs_scaled[:,n] = (Y_obs[:,n] - Y_obs_overall_mean) / max_Y_sd;
   }
 
+  int num_treated_units = 0;
+  for(n in 1:N_units) {
+    if(treated_time[n] <= T_times) {
+      num_treated_units += 1;
+    }
+  }
+
+  array[num_treated_units] int treated_units;
+  {
+    int ti = 1;
+    for(i in 1:N_units) {
+      if(treated_time[i] <= T_times) {
+        treated_units[ti] = i;
+        ti += 1;
+      }
+    }
+  }
+
   
   // Number of observed time periods for which each unit is treated.
   array[N_units] int num_treated_times;
@@ -468,6 +486,16 @@ transformed parameters {
     spillover_effects[earliest_treated:T_times, spill_ii[m]] 
       = spillover_effects_prior_scale[spill_ii[m]] * spillover_effects_0[:,m];
   }
+
+  // Vector of causal effects for unit n (identically 0 if unit n untreated).
+  matrix[T_times, N_units] delta;
+  for(n in 1:N_units) {
+    delta[:,n] = rep_vector(0, T_times);
+    delta[(treated_time[n]):T_times, n] = segment(causal_effects, 
+                                                  min({num_treated_before[n]+1,
+                                                       total_treated}), 
+                                                  num_treated_times[n]); 
+  }
   
 }
 
@@ -475,20 +503,12 @@ model {
   
   // Per-unit exchangeable error likelihoods.
   // ---------------------------------------------------------------------------
-  for(n in 1:N_units) {
-    
-    // Vector of causal effects for unit n (identically 0 if unit n untreated).
-    vector[T_times] delta_n = rep_vector(0, T_times);
-    delta_n[(treated_time[n]):T_times] = segment(causal_effects, 
-                                                 min({num_treated_before[n]+1,
-                                                     total_treated}), 
-                                                 num_treated_times[n]); 
-                                                 
+  for(n in 1:N_units) {                                                
     // Vector of spillover effect for unit n
     
     // Mean vector for unit n, combining all effects except exchangeable error.
     vector[T_times] mean_n = unit_intercept[n] 
-                               + delta_n 
+                               + delta[:,n]
                                + spillover_effects[:,n]
                                + regression_component[:,n]
                                + latent_component[:,n];
@@ -589,7 +609,12 @@ generated quantities {
     latent_trends[:,n] = (max_Y_sd * latent_trends[:,n]) + Y_obs_overall_mean;
   }
 
+  matrix[T_times, num_treated_units] treated_control;
+  treated_control = latent_trends[:, treated_units];
+
   vector[total_treated] causal_effects_scaled = max_Y_sd 
                                                 * causal_effects;
+
+  matrix[T_times, num_treated_units] effs = max_Y_sd * delta[:, treated_units];
                   
 }

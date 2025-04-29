@@ -20,7 +20,7 @@ get_wg_long <- function() {
 }
 
 #' @export 
-run_wg_example <- function(latent = 5, inc_reg = TRUE) {
+run_wg_example <- function(latent = 5, inc_reg = TRUE, save = FALSE, save_iter = NULL) {
   wg_data_long <- get_wg_long()
 
   # gs_fit <- gsynth::gsynth(
@@ -62,20 +62,22 @@ run_wg_example <- function(latent = 5, inc_reg = TRUE) {
   # max_year <- max(wg_data_long$year) + 1
   # num_countries <- length(unique(wg_data_long$country))
 
-  st_fit <- fit_model(
+  st_fit <- fit_stan_model(
     wg_data_long,
     treated_index = "D",
     num_latent = latent,
     response = "gdp",
     time = "year",
     unit = "country",
-    covars = c("trade"), # c("trade", "infrate", "industry", "schooling", "invest80"),
-    sampler_options = list(warm = 1000, iter = 3000, ad = 0.8, mt = 11),
+    covars = c("trade", "infrate", "industry", "schooling", "invest80"),
+    sampler_options = list(warm = 1000, iter = 4000, ad = 0.8, mt = 11),
     include_spillover = FALSE,
     integrate_factors = FALSE,
     include_intercepts = FALSE,
     include_unit_coefs = FALSE,
-    include_regression = inc_reg
+    include_regression = inc_reg,
+    output_dir = ifelse(save, "./R/cmdstan_data", NULL),
+    thin = ifelse(is.null(save_iter), NULL, floor(5000 / save_iter))
   )
 
   return(list(
