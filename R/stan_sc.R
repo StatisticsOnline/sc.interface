@@ -135,14 +135,14 @@ fit_stan_model <- function(data_long,
   }
 
   data <- c(data, list(
-    causal_effects_prior_scale = 0.4,
-    unit_intercept_prior_scale = 0.2,
-    phi_latent_lb = 0.9,
-    phi_latent_ub = 0.99999, #0.99999
+    causal_effects_prior_scale = 2, # 0.4
+    unit_intercept_prior_scale = 1,
+    phi_latent_lb = 0, # 0.9
+    phi_latent_ub = 1.2, #0.99999
     phi_zeta_lb = 0,
     phi_zeta_ub = 1,
     overall_sd_prior_scale = 1,
-    lambda_ub = 0.999, #0.99
+    lambda_ub = 0.999, #0.999
     lambda_lb = 0.9,
     time_coefs_sd = rep(coefs_scale_est, num_covars),
     spillover_effects_prior_scale = rep(0, ncol(data$Y_obs)),
@@ -188,8 +188,8 @@ fit_stan_model <- function(data_long,
   e1_init <- e1 + rnorm(data$T_times, 0, 0.0001)
   e1_list <- list(
     factors_0_first = e1_init,
-    factors_autocor_0 = rep(0.95 * log(data$lambda_ub / (1 - data$lambda_ub)), data$K_latent),
-    frac_var_latent = 0.998
+    # factors_autocor_0 = rep(0.99 * log(data$phi_latent_ub / (1 - data$phi_latent_ub)), data$K_latent),
+    frac_var_latent = 0.98
   )
   e1_init_list <- list(e1_list, e1_list, e1_list, e1_list)
 

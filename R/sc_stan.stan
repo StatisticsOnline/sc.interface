@@ -61,22 +61,6 @@ functions {
     
     return process;
   }
-
-  vector ar_process_ns(vector innovations,
-                       real autocor,
-                       real err_scale) {
-    
-    int T = num_elements(innovations);
-    vector[T] ar_process;
-    
-    ar_process[1] = err_scale * innovations[1]; // scale_inno * 
-    for(t in 2:T) {
-      ar_process[t] = (autocor * ar_process[t-1]) 
-                      + (err_scale * innovations[t]);
-    }
-    
-    return ar_process;
-  }
   
   real spillover_process_lpdf(vector effects, 
                               real causal_scale,
@@ -312,8 +296,8 @@ parameters {
   matrix[T_times, K_latent - 1] factors_0_rest;
   
   // Lag-1 autocorrelation for latent factor process.
-  vector<lower=phi_latent_lb, upper=phi_latent_ub>[K_latent] factors_autocor;
-  // vector<lower=logit(phi_latent_lb / 2), upper=logit(phi_latent_ub / 2)>[K_latent] factors_autocor_0;
+  //vector<lower=phi_latent_lb, upper=phi_latent_ub>[K_latent] factors_autocor;
+  vector<lower=logit(phi_latent_lb), upper=logit(phi_latent_ub)>[K_latent] factors_autocor_0;
   // ---------------------------------------------------------------------------
   
   // ---------------------------------------------------------------------------
@@ -346,17 +330,13 @@ parameters {
   vector[total_treated] causal_effects_0;
   
   // Spillover effects.
-  matrix[S_spillover, M_spillover] spillover_effects_0;
-
-  vector<lower=0>[K_latent] ar_sc;
-  
+  matrix[S_spillover, M_spillover] spillover_effects_0;  
 }
 
 transformed parameters {
 
-  //vector<lower=phi_latent_lb, upper=phi_latent_ub>[K_latent] factors_autocor;
-  // factors_autocor = inv_logit(factors_autocor_0);
-  //factors_autocor = 2 * inv_logit(factors_autocor_0);
+  vector<lower=phi_latent_lb, upper=phi_latent_ub>[K_latent] factors_autocor;
+  factors_autocor = inv_logit(factors_autocor_0);
 
   // Latent factor component.
   // ---------------------------------------------------------------------------
@@ -428,8 +408,7 @@ transformed parameters {
   matrix[T_times, K_latent] factors;
   
   for(k in 1:K_latent) {
-    //factors[:, k] = ar_process(factors_0[:, k], factors_autocor[k], 1, integrated_factors);
-    factors[:, k] = ar_process_ns(factors_0[:, k], factors_autocor[k], 0.01 + exp(-ar_sc[k]));
+    factors[:, k] = ar_process(factors_0[:, k], factors_autocor[k], 1, integrated_factors);
   }
   
   // Per-unit latent mean process.
@@ -519,11 +498,7 @@ transformed parameters {
   
 }
 
-model {
-
-  ar_sc ~ normal(3, 3);
-  factors_autocor ~ normal(0.8, 0.3);
-  
+model {  
   // Per-unit exchangeable error likelihoods.
   // ---------------------------------------------------------------------------
   for(n in 1:N_units) {                                                
@@ -552,10 +527,10 @@ model {
   // (Roughly) unit priors for scale-normalized quantities
   // ---------------------------------------------------------------------------
   if(t_df > 0) {
-    to_vector(factors_0[1, :]) ~ student_t(t_df, 0, 1); // 10
+    to_vector(factors_0[1, :]) ~ student_t(t_df, 0, 10);
     to_vector(factors_0[2:T_times, :]) ~ student_t(t_df, 0, 1);
   } else {
-    to_vector(factors_0[1, :]) ~ normal(0, 1); // 10
+    to_vector(factors_0[1, :]) ~ normal(0, 10);
     to_vector(factors_0[2:T_times, :]) ~ normal(0, 1);
   }
 
@@ -578,7 +553,7 @@ model {
   
   causal_effects_0 ~ normal(0, 1);
 
-  //factors_autocor_0 ~ normal(0, 1000);
+  factors_autocor_0 ~ normal(0, 1000);
   // ---------------------------------------------------------------------------
   
   // Zero-avoiding priors on diagonal of loadings matrix to avoid 

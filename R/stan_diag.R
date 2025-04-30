@@ -74,3 +74,9 @@ check_mixing <- function(stanfit) {
     min(as.numeric(diags$ess_bulk), na.rm = TRUE)
   ))
 }
+
+check_autocors <- function(fits) {
+  # print(rowMeans(fits$bp_fit$pf))
+  fac <- fits$st_fit$posterior$draws("factors_autocor", format = "draws_matrix")
+  print(colMeans(fac))
+}
