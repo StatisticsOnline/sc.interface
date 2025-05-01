@@ -1,5 +1,5 @@
 stan_model <- cmdstanr::cmdstan_model(
-  stan_file = system.file("R", "sc_stan_alt.stan", package = "sc.interface"),
+  stan_file = system.file("sc_stan_alt.stan", package = "sc.interface"),
   stanc_options = list("O1")
 )
 
