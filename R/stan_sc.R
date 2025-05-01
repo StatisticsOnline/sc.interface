@@ -1,4 +1,4 @@
-model <- cmdstanr::cmdstan_model(
+stan_model <- cmdstanr::cmdstan_model(
   stan_file = system.file("R", "sc_stan_alt.stan", package = "sc.interface"),
   stanc_options = list("O1")
 )
@@ -138,7 +138,7 @@ fit_stan_model <- function(data_long,
     causal_effects_prior_scale = 2, # 0.4
     unit_intercept_prior_scale = 1,
     phi_latent_lb = 0, # 0.9
-    phi_latent_ub = 1.2, #0.99999
+    phi_latent_ub = 0.99999, #0.99999
     phi_zeta_lb = 0,
     phi_zeta_ub = 1,
     overall_sd_prior_scale = 1,
@@ -195,7 +195,7 @@ fit_stan_model <- function(data_long,
 
   data$t_df <- 30
 
-  synth_fit <- model$sample(
+  synth_fit <- stan_model$sample(
     data = data,
     iter_warmup = sampler_options$warm,
     iter_sampling = sampler_options$iter,
@@ -206,6 +206,8 @@ fit_stan_model <- function(data_long,
     parallel_chains = floor(0.8 * parallel::detectCores()),
     output_dir = output_dir
   )
+
+  meta_data$stan_data <- data
 
   synth_fit$cmdstan_diagnose()
 

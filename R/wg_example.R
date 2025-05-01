@@ -1,6 +1,6 @@
 get_wg_long <- function() {
   data <- haven::read_dta(
-    system.file("R", "repgermany.dta", package = "sc.interface")
+    system.file("extdata", "repgermany.dta", package = "sc.interface")
   )
 
   # Average covariates over pre-treatment times
@@ -19,70 +19,56 @@ get_wg_long <- function() {
   return(as.data.frame(data_pre))
 }
 
+#' Run backends on West German reunification data
+#' 
+#' Runs all three backends on the classic West German reunification example.
+#' Synthetic control estimates are constructed for the effect of reunification
+#' on the West German GDP. By default, estimates are loaded in from pre-computed
+#' data, but analysis can be optionally rerun.
+#' 
+#' @param refit Should the synthetic control estimates be recomputed from each
+#'  available backend.
+#' 
+#' @return List of inference outputs from each of the three available backend
+#'  methods. 
 #' @export 
-run_wg_example <- function(latent = 5, inc_reg = TRUE, save = FALSE, save_iter = NULL) {
-  wg_data_long <- get_wg_long()
+run_wg_example <- function(refit = FALSE) {
 
-  # gs_fit <- gsynth::gsynth(
-  #   Y = "gdp",
-  #   X = c(), 
-  #   D = "D",
-  #   index = c("country", "year"),
-  #   data = wg_data_long,
-  #   r = latent,
-  #   force = "time"
-  # )
+  if (refit) {
+    wg_data_long <- get_wg_long()
+    wg_fits <- run_sc(
+      wg_data_long, 
+      response = "gdp",
+      panel_index = c("country", "year"),
+      covars = c(),
+      num_latent = 10,
+      treated_index = "D",
+      stan_iter = 4000,
+      include_covars = c()
+    )
+  } else {
+    load(system.file("data", "wg_gs_fit.RData", package = "sc.interface"))
+    load(system.file("data", "wg_bp_fit.RData", package = "sc.interface"))
+    load(system.file("data", "wg_stan_fit_meta.RData", package = "sc.interface"))
+    stan_files = c(
+      system.file("extdata", "wg_stan_c1.csv", package = "sc.interface"),
+      system.file("extdata", "wg_stan_c2.csv", package = "sc.interface"),
+      system.file("extdata", "wg_stan_c3.csv", package = "sc.interface"),
+      system.file("extdata", "wg_stan_c4.csv", package = "sc.interface")
+    )
+    wg_stan_fit_post <- cmdstanr::as_cmdstan_fit(stan_files, check_diagnostics = FALSE)
+    wg_stan_fit_gq <- stan_model$generate_quantities(
+      wg_stan_fit_post, data = wg_stan_fit_meta$stan_data
+    )
+    wg_fits <- list(
+      st_fit = list(
+        posterior = wg_stan_fit_gq,
+        meta = wg_stan_fit_meta
+      ),
+      bp_fit = wg_bp_fit,
+      gs_fit = wg_gs_fit
+    )
+  }
 
-  # bp_fit <- bpCausal::bpCausal(
-  #   data = wg_data_long,
-  #   index = c("country", "time"),
-  #   Yname = "gdp",
-  #   Dname = "D",
-  #   Xname = c("trade", "infrate", "industry", "schooling", "invest80"),
-  #   Aname = c("trade", "infrate", "industry", "schooling", "invest80"),
-  #   Zname = c(),
-  #   xlasso = 1,
-  #   zlasso = 1,
-  #   alasso = 1,
-  #   flasso = 1,
-  #   r = latent,
-  #   burn = 5000,
-  #   niter = 15000
-  # )
-
-  # wg_data_stan <- get_wg_stan(latent = latent)
-  # st_fit <- fit_model(
-  #   wg_data_stan,
-  #   sampler_options = list(warm = 1000, iter = 2000, ad = 0.8, mt = 12),
-  #   include_spillover = FALSE,
-  #   integrate_factors = FALSE,
-  #   include_intercepts = FALSE,
-  #   include_unit_coefs = FALSE
-  # )
-  # max_year <- max(wg_data_long$year) + 1
-  # num_countries <- length(unique(wg_data_long$country))
-
-  st_fit <- fit_stan_model(
-    wg_data_long,
-    treated_index = "D",
-    num_latent = latent,
-    response = "gdp",
-    time = "year",
-    unit = "country",
-    covars = c("trade", "infrate", "industry", "schooling", "invest80"),
-    sampler_options = list(warm = 1000, iter = 4000, ad = 0.8, mt = 11),
-    include_spillover = FALSE,
-    integrate_factors = FALSE,
-    include_intercepts = FALSE,
-    include_unit_coefs = FALSE,
-    include_regression = inc_reg,
-    output_dir = ifelse(save, "./R/cmdstan_data", NULL),
-    thin = ifelse(is.null(save_iter), NULL, floor(5000 / save_iter))
-  )
-
-  return(list(
-    st_fit = st_fit
-    # gs_fit = gs_fit,
-    # bp_fit = bp_fit
-  ))  
+  return(wg_fits)  
 }

@@ -1,3 +1,23 @@
+#' Generate inferential summaries from synthetic control fits.
+#' 
+#' Given a list of synthetic control method fits, `summarize()` generates point estimates
+#' for treatment effects and untreated potential outcomes, along with measures
+#' of uncertainty and intervals.
+#' 
+#' @param fits List of outputs from synthetic control backends, e.g. as output by [sc.interface::run_sc()].
+#' @param stats Vector of inferential summaries to generate. Possible quantites are `y.ct` for
+#'  untreated potential outcomes of treated units, `eff` for causal effects, `err` for measures
+#'  of error (standard errors for gsynth and posterior SDs for bpCausal and Stan).
+#' @param format Either "long" to return summaries in long (i.e. data frame) format, or
+#'  "wide" to return summaries as a list of arrays.
+#' @param level Level to use for uncertainty intervals (confidence intervals for gsynth and
+#'  credible intervals for bpCausal and Stan). If `NULL`, intervals are not generated.
+#' 
+#' @returns If `format = "long"`, returns data frame with columns for the treated unit,
+#'  time index, backend method, and each computed summary quantity. If `format = "wide"`, returns 
+#'  list of arrays for each backend method with extents (number of times) x
+#'  (number of treated units) x (number of summary quantities). Note: uncertainty intervals
+#'  are only available in long format.
 #' @export 
 summarize <- function(fits, stats = c("y.ct", "eff", "err"), format = "long", level = NULL) {
   if (!is.null(level) && format != "long") {

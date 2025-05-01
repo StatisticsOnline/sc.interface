@@ -1,3 +1,21 @@
+#' Plot treatment effects and uncertainty intervals for all backends
+#'
+#' `plot_treated()` plots the estimated treatment effects against the time variable
+#' for all treated unit and all fitted backends. Point estimates are plotted along with
+#' uncertainty intervals. For gsynth, uncertainty intervals are bootstrap confidence
+#' intervals. For bpCausal and stan, the point estimates are posterior means, and the
+#' uncertainty intervals are credible intervals.
+#' 
+#' @param fits List of fits, e.g. from calling [run_sc()].
+#' @param level Level for plotted confidence / credible intervals.
+#' @param start Index of first time to plot. Times shown on the x axis will range
+#'  from time `start` to the last time.
+#' @param compare If equal to one of "gsynth", "bpcausal", or "stan", the plot will
+#'  emphasize the inferred effects from backend `compare`, allowing for easier
+#'  comparison between method `compare` and others.
+#' @param ylim If equal to a vector of two numbers, defines the lower and upper y axis
+#'  limits.
+#'
 #' @export 
 plot_treated <- function(fits, level = 0.95, start = 1, compare = NULL, ylim = NULL) {
 
