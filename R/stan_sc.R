@@ -90,7 +90,7 @@ fit_stan_model <- function(data_long,
                            include_intercepts = TRUE,
                            include_unit_coefs = TRUE,
                            integrate_factors = FALSE,
-                           include_spillover = TRUE,
+                           include_spillover = FALSE,
                            include_regression = TRUE,
                            sf_mean = 0.5,
                            sf_kappa = 1) {
@@ -124,6 +124,7 @@ fit_stan_model <- function(data_long,
     ols_fit <- lm(avg_response ~ ., data = avg_covars)
     ols_coefs <- ols_fit$coefficients[2:(length(covars)+1)]
     coefs_scale_est <- 2 * max(abs(ols_coefs))
+    print(paste0("coefs scale estimate is ", coefs_scale_est))
 
     if (!include_unit_coefs) {
       data$unit_coefs_sd_prior_scale <- numeric(length = 0)
@@ -193,7 +194,8 @@ fit_stan_model <- function(data_long,
   )
   e1_init_list <- list(e1_list, e1_list, e1_list, e1_list)
 
-  data$t_df <- 30
+  # data$t_df <- 30
+  data$t_df <- 0
 
   synth_fit <- stan_model$sample(
     data = data,

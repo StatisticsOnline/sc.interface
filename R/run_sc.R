@@ -119,7 +119,7 @@ run_sc <- function(
       include_spillover = FALSE,
       integrate_factors = FALSE,
       include_intercepts = TRUE,
-      include_unit_coefs = FALSE,
+      include_unit_coefs = TRUE,
       include_regression = ("st" %in% include_covars),
       output_dir = "./"
     )

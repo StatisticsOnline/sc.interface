@@ -428,8 +428,8 @@ transformed parameters {
   matrix[T_times, K_latent] factors;
   
   for(k in 1:K_latent) {
-    //factors[:, k] = ar_process(factors_0[:, k], factors_autocor[k], 1, integrated_factors);
-    factors[:, k] = ar_process_ns(factors_0[:, k], factors_autocor[k], 0.01 + exp(-ar_sc[k]));
+    factors[:, k] = ar_process(factors_0[:, k], factors_autocor[k], 1, integrated_factors);
+    //factors[:, k] = ar_process_ns(factors_0[:, k], factors_autocor[k], 0.01 + exp(-ar_sc[k]));
   }
   
   // Per-unit latent mean process.
@@ -566,7 +566,7 @@ model {
   // unit_coefs_expanded[l,:]. No Jacobian adjustment is needed since the
   // transformation is linear.
   if(include_unit_coefs) {
-    to_vector(unit_coefs_expanded) ~ normal(0, inv(sqrt(1 - inv(L_covars)))); 
+    to_vector(unit_coefs_expanded) ~ normal(0, inv(sqrt(1 - inv(N_units))));
   }
   unit_coefs_sd_0 ~ normal(0, 1);
   
@@ -588,12 +588,20 @@ model {
   
   // ---------------------------------------------------------------------------
   // If Q_edges = 0, latent factors reduce to random_effects
-  if(zap) {
-    random_effects_flat_upper ~ inv_gamma(3, 10);
-  } else {
-    random_effects_flat_upper ~ normal(0, 1);
+  // if(zap) {
+  //   random_effects_flat_upper ~ inv_gamma(3, 10);
+  // } else {
+  //   random_effects_flat_upper ~ normal(0, 1);
+  // }
+  // random_effects_flat_lower ~ normal(0, 1);
+
+  for(n in 1:N_units) {
+    if(n <= K_latent) {
+      random_effects[n, 1:n] ~ normal(0, 2 / sqrt(n));
+    } else {
+      random_effects[n, 1:K_latent] ~ normal(0, 2 / sqrt(K_latent));
+    }
   }
-  random_effects_flat_lower ~ normal(0, 1);
   
   if(Q_edges > 0) {
     
