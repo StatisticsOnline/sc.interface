@@ -103,15 +103,18 @@ transformed data {
   real Y_obs_overall_mean = mean(Y_obs);
   vector[N_units] Y_obs_means;
   vector[N_units] Y_obs_sds;
+  vector[N_units] Y_obs_rms;
 
   for(n in 1:N_units) {
     Y_obs_sds[n] = sd(Y_obs[:,n]);
+    Y_obs_rms[n] = sqrt(mean(Y_obs[:,n] .^ 2));
     Y_obs_means[n] = mean(Y_obs[:,n]);
   }
 
-  real max_Y_sd = max(Y_obs_sds);
+  real max_Y_sd =  max(Y_obs_sds);
+  real max_Y_rms = max(Y_obs_rms);
   for(n in 1:N_units) {
-    Y_obs_scaled[:,n] = (Y_obs[:,n] - Y_obs_overall_mean) / max_Y_sd;
+    Y_obs_scaled[:,n] = (Y_obs[:,n] - Y_obs_overall_mean) / max_Y_sd; //
   }
 
   int num_treated_units = 0;
@@ -212,7 +215,7 @@ parameters {
   
   // Scale-normalized standard deviation of unit-varying coefficients,
   // describing how (dis)similar coefficients are across units.
-  vector<lower=0>[include_unit_coefs ? L_covars : 0] unit_coefs_sd_0;
+  // vector<lower=0>[include_unit_coefs ? L_covars : 0] unit_coefs_sd_0;
   // ---------------------------------------------------------------------------
   
   // Scale-normalized unit-specific intercepts.
@@ -275,12 +278,8 @@ transformed parameters {
   for(l in 1:L_covars) {
     time_coefs[:, l] = ar_process(time_coefs_0[:, l],
                                   time_coefs_autocor[l],
-                                  time_coefs_sd[l] / sd(X[:,1,l]), 0);
+                                  time_coefs_sd[l] / max_Y_sd, 0);
   }
-  
-  // Standard deviation of unit-varying coefficients.
-  vector<lower=0>[include_unit_coefs ? L_covars : 0] unit_coefs_sd;
-  unit_coefs_sd = unit_coefs_sd_prior_scale .* unit_coefs_sd_0;
   
   // Unit-varying coefficients.
   matrix[include_unit_coefs ? L_covars : 0, N_units] unit_coefs;
@@ -291,7 +290,7 @@ transformed parameters {
   if(include_unit_coefs) {
     unit_coefs_expanded = expand_sum_to_zero(unit_coefs_0);
   
-    unit_coefs = diag_pre_multiply(unit_coefs_sd, 
+    unit_coefs = diag_pre_multiply(unit_coefs_sd_prior_scale / max_Y_sd,
                                    unit_coefs_expanded);
   } 
   
@@ -332,8 +331,6 @@ transformed parameters {
 }
 
 model {
-
-  factors_autocor ~ normal(0.8, 0.3);
   
   // Per-unit exchangeable error likelihoods.
   // ---------------------------------------------------------------------------
@@ -375,7 +372,6 @@ model {
   if(include_unit_coefs) {
     to_vector(unit_coefs_expanded) ~ normal(0, inv(sqrt(1 - inv(N_units))));
   }
-  unit_coefs_sd_0 ~ normal(0, 1);
   
   to_vector(time_coefs_0) ~ normal(0, 1);
   
