@@ -336,19 +336,21 @@ transformed parameters {
   vector[T_treated] ce_mean = ar_process_centered(ce_mean_err, rep_vector(causal_effects_prior_scale * ce_overall_mean, T_treated), autocor_overall, causal_effects_prior_scale * ce_sigma_overall_0);
 
   // Vector of causal effects for unit n (identically 0 if unit n untreated).
+  matrix[T_treated, N_units] beta;
+  matrix[T_treated, N_units] theta;
+
   matrix[T_times, N_units] delta = rep_matrix(0, T_times, N_units);
   for(n in 1:N_treated) {
     vector[T_treated] ce_errs_n = ce_errs_0[:, n];
-    //vector[T_treated] beta_n = ar_process_centered(ce_errs_n, ce_mean, autocor_ce[n], causal_effects_prior_scale * ce_sigma_0);
-    vector[T_treated] beta_n;
+    
     if(hierarchical_delta) {
-      beta_n = ar_process_centered(ce_errs_n, ce_mean, autocor_ce[n], causal_effects_prior_scale * ce_sigma_0);
+      beta[:,n] = ar_process_centered(ce_errs_n, ce_mean, autocor_ce[n], causal_effects_prior_scale * ce_sigma_0);
     } else {
-      beta_n = ar_process_centered(ce_errs_n, rep_vector(0, T_treated), autocor_ce[n], causal_effects_prior_scale * ce_sigma_0);
+      beta[:,n] = ar_process_centered(ce_errs_n, rep_vector(0, T_treated), autocor_ce[n], causal_effects_prior_scale * ce_sigma_0);
     }
-    vector[T_treated] theta_n = causal_effects_prior_scale * ce_random_effs_0[:,n];
+    theta[:,n] = causal_effects_prior_scale * ce_random_effs_0[:,n];
 
-    delta[treated_time:T_times, treated_units[n]] = beta_n * prop_treated[n] + theta_n;
+    delta[treated_time:T_times, treated_units[n]] = beta[:,n] * prop_treated[n] + theta[:,n];
   }
 
   for(t in 1:T_times) {
