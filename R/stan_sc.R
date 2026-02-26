@@ -1,6 +1,6 @@
 # Compile Stan model
 stan_model <- cmdstanr::cmdstan_model(
-  stan_file = system.file("sc_stan.stan", package = "sc.stan"),
+  stan_file = system.file("sc_stan.stan", package = "sc.interface"),
   stanc_options = list("O1")
 )
 
@@ -70,7 +70,7 @@ format_data_to_stan <- function(
   }
   prop_treated <- prop_treated[order_by_units(prop_treated)]
   cov_names <- order_by_units(colnames(wishart_cov))
-  wishart_cov <- wishart_cov[cov_names, cov_names]
+  wishart_cov <- wishart_cov[cov_names, cov_names, drop = FALSE]
 
   num_covars <- length(covars)
   covar_array <-
@@ -93,11 +93,17 @@ format_data_to_stan <- function(
     }
   }
 
+  if (!all(tt[tt < max(tt)] == min(tt))) {
+    stop("Stan model requires all treated units to be treated at same time.")
+  }
+
   return(list(
     stan_data = list(
       Y_obs = response_matrix,
       X = covar_array,
-      treated_time = tt,
+      treated_time = min(tt),
+      treated_units = which(tt < max(tt)),
+      N_treated = length(which(tt < max(tt))),
       Ysc = response_matrix_scaled,
       prop_treated = prop_treated,
       cov_eff_re_df = wishart_df,
@@ -167,12 +173,12 @@ fit_stan_model <- function(data_long,
                            sampler_options = NULL,
                            include_intercepts = TRUE,
                            include_unit_coefs = TRUE,
-                           include_regression = TRUE) {
+                           include_regression = TRUE,
+                           hierarchical_delta = TRUE) {
 
   formatted_data <- format_data_to_stan(
     data_long, response, time, unit, covars, treated_index,
-    prop_treated, wishart_cov, wishart_df,
-    scale = FALSE
+    prop_treated, wishart_cov, wishart_df
   )
 
   meta_data <- formatted_data$meta_data
@@ -220,7 +226,8 @@ fit_stan_model <- function(data_long,
     spillover_effects_prior_scale = rep(0, ncol(data$Y_obs)),
     K_latent = num_latent,
     zap = FALSE,
-    T_pos = 0
+    T_pos = 0,
+    hierarchical_delta = hierarchical_delta
   ))
 
   if (!include_regression) {
@@ -277,10 +284,8 @@ fit_stan_model <- function(data_long,
   writeLines("Estimated Causal Effects (Posterior Quartiles)")
   print(delta_causal_qs)
 
-  return(ScStanFit$new(
-    synth_fit,
-    meta_data$stan_data,
-    meta_data$unit_names,
-    meta_data$treated_indices
+  return(list(
+    posterior = synth_fit,
+    meta = meta_data
   ))
 }

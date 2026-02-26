@@ -36,6 +36,8 @@ run_wg_example <- function(refit = FALSE) {
 
   if (refit) {
     wg_data_long <- get_wg_long()
+    prior_cov <- matrix(1000)
+    colnames(prior_cov) <- "West Germany"
     wg_fits <- run_sc(
       wg_data_long, 
       response = "gdp",
@@ -43,7 +45,10 @@ run_wg_example <- function(refit = FALSE) {
       covars = c(),
       num_latent = 10,
       treated_index = "D",
-      stan_iter = 4000,
+      wishart_df = 10,
+      wishart_cov = prior_cov,
+      prop_treated = c("West Germany" = 1),
+      stan_iter = 400,
       include_covars = c()
     )
   } else {
@@ -56,7 +61,7 @@ run_wg_example <- function(refit = FALSE) {
         system.file("extdata", "wg_stan_c2.csv", package = "sc.interface"),
         system.file("extdata", "wg_stan_c3.csv", package = "sc.interface"),
         system.file("extdata", "wg_stan_c4.csv", package = "sc.interface")
-      ), 
+      ),
       check_diagnostics = FALSE
     )
     wg_stan_fit_gq <- stan_model$generate_quantities(

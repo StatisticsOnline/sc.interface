@@ -123,12 +123,17 @@ data {
   real<lower=0, upper=1> lambda_lb;
   // ---------------------------------------------------------------------------
 
-  vector<lower=0, upper=1>[N_units] prop_treated;
+  vector<lower=0, upper=1>[N_treated] prop_treated;
   real<lower=0> cov_eff_re_df;
   cov_matrix[N_treated] cov_eff_re_S;
+
+  int<lower=0, upper=1> hierarchical_delta;
 }
 
 transformed data {
+
+  vector[N_units] prop_treated_ext = rep_vector(0, N_units);
+  prop_treated_ext[treated_units] = prop_treated;
 
   int T_treated = T_times - treated_time + 1;
 
@@ -231,7 +236,7 @@ parameters {
   real<lower=0,upper=1> autocor_overall;
 
   matrix[T_treated, N_treated] ce_errs_0;
-  vector[N_treated] autocor_ce;
+  vector<lower=0,upper=0.98>[N_treated] autocor_ce;
 
   real<lower=0> ce_sigma_overall_0;
   real<lower=0> ce_sigma_0;
@@ -331,14 +336,29 @@ transformed parameters {
   vector[T_treated] ce_mean = ar_process_centered(ce_mean_err, rep_vector(causal_effects_prior_scale * ce_overall_mean, T_treated), autocor_overall, causal_effects_prior_scale * ce_sigma_overall_0);
 
   // Vector of causal effects for unit n (identically 0 if unit n untreated).
-  matrix[T_times, N_units] delta;
-  for(n in 1:N_units) {
+  matrix[T_times, N_units] delta = rep_matrix(0, T_times, N_units);
+  for(n in 1:N_treated) {
     vector[T_treated] ce_errs_n = ce_errs_0[:, n];
-    vector[T_treated] beta_n = ar_process_centered(ce_errs_n, ce_mean, autocor_ce[n], causal_effects_prior_scale * ce_sigma_0);
+    //vector[T_treated] beta_n = ar_process_centered(ce_errs_n, ce_mean, autocor_ce[n], causal_effects_prior_scale * ce_sigma_0);
+    vector[T_treated] beta_n;
+    if(hierarchical_delta) {
+      beta_n = ar_process_centered(ce_errs_n, ce_mean, autocor_ce[n], causal_effects_prior_scale * ce_sigma_0);
+    } else {
+      beta_n = ar_process_centered(ce_errs_n, rep_vector(0, T_treated), autocor_ce[n], causal_effects_prior_scale * ce_sigma_0);
+    }
     vector[T_treated] theta_n = causal_effects_prior_scale * ce_random_effs_0[:,n];
 
-    delta[:,n] = rep_vector(0, T_times);
-    delta[treated_time:T_times, n] = beta_n * prop_treated[n] + theta_n;
+    delta[treated_time:T_times, treated_units[n]] = beta_n * prop_treated_ext[n]; // + theta_n;
+  }
+
+  for(t in 1:T_times) {
+    for(n in 1:N_units) {
+      if(is_nan(delta[t,n])) {
+        print("Delta NaN at position:");
+        print(t);
+        print(n);
+      }
+    }
   }
 }
 
