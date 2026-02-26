@@ -1,14 +1,37 @@
+# Compile Stan model
 stan_model <- cmdstanr::cmdstan_model(
-  stan_file = system.file("sc_stan_alt.stan", package = "sc.interface"),
+  stan_file = system.file("sc_stan.stan", package = "sc.stan"),
   stanc_options = list("O1")
 )
 
+# Utility function
 first_one <- function(xs) {
   return(1 + sum(1 - xs))
 }
 
+#' Take data in long (data frame) format, and convert to list of
+#' data variables for Stan model
+#'
+#' @param data A data frame containing data for fitting causal
+#' latent factor model
+#' @param response A string indicating the name of the column in
+#' data containing the response/outcome variable (e.g. GDP)
+#' @param time A string indicating the name of the column in
+#' data containing the time variable (e.g. year)
+#' @param unit A string indicating the name of the column in
+#' data containing the unit variable (e.g. country)
+#' @param covars A vector of strings indicating the columns
+#' in data containing the covariate variables (e.g. inflation)
+#' @param treated_index A string indicating the column in data
+#' containing the treatement indicator (0 or 1)
+#' @returns A list with components stan_data (which contains
+#' data variables X, Y_obs, and treated_time formatted for
+#' the Stan model) and meta_data (which contains the names of
+#' the units from the data variable as well as a vector of
+#' which unit's were treated for at least one time, by index).
 format_data_to_stan <- function(
-  data, response, time, unit, covars, treated_index, scale = FALSE
+  data, response, time, unit, covars, treated_index,
+  prop_treated, wishart_cov, wishart_df
 ) {
   if (!is.data.frame(data)) {
     stop("Data must be provided in long format as a data frame.")
@@ -20,7 +43,7 @@ format_data_to_stan <- function(
     dplyr::summarize(
       dplyr::across(treated_index, first_one)
     )
-  
+
   tt <- rev(tt[, treated_index, drop = TRUE])
 
   response_matrix <- as.matrix(
@@ -39,12 +62,21 @@ format_data_to_stan <- function(
   unit_names <- colnames(response_matrix)
 
   response_matrix_scaled <- response_matrix - mean(response_matrix)
-  response_matrix_scaled <- response_matrix_scaled / max(apply(response_matrix, 2, sd))
+  response_matrix_scaled <-
+    response_matrix_scaled / max(apply(response_matrix, 2, sd))
+
+  order_by_units <- function(names) {
+    return(order(factor(names, levels = as.factor(unit_names))))
+  }
+  prop_treated <- prop_treated[order_by_units(prop_treated)]
+  cov_names <- order_by_units(colnames(wishart_cov))
+  wishart_cov <- wishart_cov[cov_names, cov_names]
 
   num_covars <- length(covars)
-  covar_array <- array(dim = c(ncol(response_matrix), nrow(response_matrix), num_covars))
+  covar_array <-
+    array(dim = c(ncol(response_matrix), nrow(response_matrix), num_covars))
   if (num_covars > 0) {
-    for(c in 1:num_covars) {
+    for (c in 1:num_covars) {
       covar_mat <- t(as.matrix(
         data |>
           dplyr::select(covars[c], time, unit) |>
@@ -66,7 +98,10 @@ format_data_to_stan <- function(
       Y_obs = response_matrix,
       X = covar_array,
       treated_time = tt,
-      Ysc = response_matrix_scaled
+      Ysc = response_matrix_scaled,
+      prop_treated = prop_treated,
+      cov_eff_re_df = wishart_df,
+      cov_eff_re_S = wishart_cov
     ),
     meta_data = list(
       unit_names = unit_names,
@@ -75,6 +110,48 @@ format_data_to_stan <- function(
   ))
 }
 
+#' Take data in long (data frame) format, and convert to list of
+#' data variables for Stan model
+#'
+#' @param data_long A data frame containing data for fitting causal
+#' latent factor model
+#' @param num_latent An integer >= 1 indicating the number of latent
+#' factors to include in the model
+#' @param response A string indicating the name of the column in
+#' data containing the response/outcome variable (e.g. GDP)
+#' @param time A string indicating the name of the column in
+#' data containing the time variable (e.g. year)
+#' @param unit A string indicating the name of the column in
+#' data containing the unit variable (e.g. country)
+#' @param covars A vector of strings indicating the columns
+#' in data containing the covariate variables (e.g. inflation)
+#' @param treated_index A string indicating the column in data
+#' containing the treatement indicator (0 or 1)
+#' @param thin A number giving the amount of thinning to apply
+#' to Stan's posterior draws. The default value (NULL) uses
+#' Stan's default thinning (0)
+#' @param output_dir Directory to store Stan output files.
+#' The default value (NULL) uses Stan's default, which stores
+#' output files in a temporary directory. If saving the ScStanFit
+#' object (e.g. in an RData file), it is strongly recommended to
+#' set this to a non-null value. Otherwise, methods called on the
+#' ScStanFit object may attempt to read from the Stan output files,
+#' which will usually be automatically deleted after some time if
+#' this parameter is NULL.
+#' @param sampler_options A list of options to pass to Stan's
+#' sampler, including adapt_delta and max_treedepth, which may be
+#' increased if divergent transitions or treedepth exceedences are
+#' encountered, respectively. See Stan documentation for details.
+#' @param include_intercepts A boolean indicating whether to include a
+#' random intercept for each unit in the model.
+#' @param include_unit_coefs A boolean indicating whether to include
+#' a unit-varying components in the regression coefficients. (This parameter
+#' is only used if include_regression is TRUE and covars has length > 0.)
+#' @param include_regression A boolean indicating whether to include the
+#' regression component in the model.
+#' @returns An ScStanFit object containing posterior draws along and
+#' basic summary and plotting functions.
+#' @export
 fit_stan_model <- function(data_long,
                            num_latent,
                            response,
@@ -82,21 +159,19 @@ fit_stan_model <- function(data_long,
                            unit,
                            covars,
                            treated_index,
+                           prop_treated,
+                           wishart_df,
+                           wishart_cov,
                            thin = NULL,
                            output_dir = NULL,
                            sampler_options = NULL,
-                           noreg = FALSE,
-                           prev_fit = NULL,
                            include_intercepts = TRUE,
                            include_unit_coefs = TRUE,
-                           integrate_factors = FALSE,
-                           include_spillover = FALSE,
-                           include_regression = TRUE,
-                           sf_mean = 0.5,
-                           sf_kappa = 1) {
+                           include_regression = TRUE) {
 
   formatted_data <- format_data_to_stan(
     data_long, response, time, unit, covars, treated_index,
+    prop_treated, wishart_cov, wishart_df,
     scale = FALSE
   )
 
@@ -106,25 +181,21 @@ fit_stan_model <- function(data_long,
   data <- c(data, list(
     T_times = nrow(data$Y_obs),
     N_units = ncol(data$Y_obs),
-    L_covars = length(covars),
-    Q_edges = 0
+    L_covars = length(covars)
   ))
 
   data$include_intercepts <- as.numeric(include_intercepts)
   data$include_unit_coefs <- as.numeric(include_unit_coefs)
-  data$include_spillover <- as.numeric(include_spillover)
   data$include_time_coefs <- 1
-  data$integrated_factors <- as.numeric(integrate_factors)
 
   num_covars <- length(covars)
-  avg_response <- colMeans(data$Y_obs)
   avg_covars <- as.data.frame(apply(data$X, c(1, 3), mean))
 
   if (include_regression) {
+    avg_response <- colMeans(data$Y_obs)
     ols_fit <- lm(avg_response ~ ., data = avg_covars)
     ols_coefs <- ols_fit$coefficients[2:(length(covars)+1)]
     coefs_scale_est <- 2 * max(abs(ols_coefs))
-    print(paste0("coefs scale estimate is ", coefs_scale_est))
 
     if (!include_unit_coefs) {
       data$unit_coefs_sd_prior_scale <- numeric(length = 0)
@@ -136,15 +207,15 @@ fit_stan_model <- function(data_long,
   }
 
   data <- c(data, list(
-    causal_effects_prior_scale = 2, # 0.4
+    causal_effects_prior_scale = 2,
     unit_intercept_prior_scale = 1,
-    phi_latent_lb = 0, # 0.9
-    phi_latent_ub = 0.99999, #0.99999
+    phi_latent_lb = 0,
+    phi_latent_ub = 0.99999,
     phi_zeta_lb = 0,
     phi_zeta_ub = 1,
     overall_sd_prior_scale = 1,
-    lambda_ub = 0.999, #0.999
-    lambda_lb = 0.9,
+    lambda_ub = 0.999,
+    lambda_lb = 0,
     time_coefs_sd = rep(coefs_scale_est, num_covars),
     spillover_effects_prior_scale = rep(0, ncol(data$Y_obs)),
     K_latent = num_latent,
@@ -152,7 +223,7 @@ fit_stan_model <- function(data_long,
     T_pos = 0
   ))
 
-  if(!include_regression) {
+  if (!include_regression) {
     data$X <- array(dim = c(data$N_units, data$T_times, 0))
     data$L_covars <- 0
     data$unit_coefs_sd_prior_scale <- numeric(length = 0)
@@ -161,20 +232,7 @@ fit_stan_model <- function(data_long,
     data$phi_zeta_ub <- numeric(length = 0)
   }
 
-  if (data$Q_edges > 0) {
-    data$sf_mean <- sf_mean
-    data$sf_kappa <- sf_kappa 
-  } else {
-    data$sf_mean <- numeric(length = 0)
-    data$sf_kappa <- numeric(length = 0)
-    data$edges_1 <- numeric(length = 0)
-    data$edges_2 <- numeric(length = 0)
-    data$spatial_scale_norm <- numeric(length = 0)
-    data$spatial_scale <- numeric(length = 0)
-    data$mean_scale <- numeric(length = 0)
-  }
-
-  if (noreg) {
+  if (!include_regression) {
     data$X <- array(dim = c(data$N_units, data$T_times, 0))
     data$L_covars <- 0
     data$unit_coefs_sd_prior_scale <- numeric(length = 0)
@@ -183,18 +241,15 @@ fit_stan_model <- function(data_long,
     data$phi_zeta_ub <- numeric(length = 0)
   }
 
-  f1 <- data$Ysc[,1]
-  e1 <- c(f1[1], (f1[2:(data$T_times)] - 0.997*f1[1:(data$T_times - 1)])) / 0.07
-  print(round(e1,3))
+  f1 <- data$Ysc[, 1]
+  e1 <-
+    c(f1[1], (f1[2:(data$T_times)] - 0.997 * f1[1:(data$T_times - 1)])) / 0.07
   e1_init <- e1 + rnorm(data$T_times, 0, 0.0001)
   e1_list <- list(
-    factors_0_first = e1_init,
-    # factors_autocor_0 = rep(0.99 * log(data$phi_latent_ub / (1 - data$phi_latent_ub)), data$K_latent),
-    frac_var_latent = 0.98
+    factors_0_first = e1_init
   )
   e1_init_list <- list(e1_list, e1_list, e1_list, e1_list)
 
-  # data$t_df <- 30
   data$t_df <- 0
 
   synth_fit <- stan_model$sample(
@@ -217,13 +272,15 @@ fit_stan_model <- function(data_long,
     synth_fit$draws(variables = "causal_effects_scaled")
   )
   delta_causal_qs <- apply(
-    delta_causal, 2, function(x) quantile(x, c(0.025, 0.25, 0.75, 0.975))
+    delta_causal, 2, function(x) quantile(x, c(0.025, 0.25, 0.5, 0.75, 0.975))
   )
-  print("Estimated Causal Effects (Posterior Quartiles)")
+  writeLines("Estimated Causal Effects (Posterior Quartiles)")
   print(delta_causal_qs)
 
-  return(list(
-    posterior = synth_fit,
-    meta = meta_data
+  return(ScStanFit$new(
+    synth_fit,
+    meta_data$stan_data,
+    meta_data$unit_names,
+    meta_data$treated_indices
   ))
 }
