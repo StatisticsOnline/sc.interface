@@ -135,5 +135,5 @@ run_sc <- function(
     st_fit = st_inf,
     gs_fit = gs_inf,
     bp_fit = bp_inf
-  ))  
+  ))
 }
