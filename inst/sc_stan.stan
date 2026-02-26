@@ -348,7 +348,7 @@ transformed parameters {
     }
     vector[T_treated] theta_n = causal_effects_prior_scale * ce_random_effs_0[:,n];
 
-    delta[treated_time:T_times, treated_units[n]] = beta_n * prop_treated[treated_units[n]] + theta_n;
+    delta[treated_time:T_times, treated_units[n]] = beta_n * prop_treated[n] + theta_n;
   }
 
   for(t in 1:T_times) {
