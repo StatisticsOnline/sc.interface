@@ -174,7 +174,8 @@ fit_stan_model <- function(data_long,
                            include_intercepts = TRUE,
                            include_unit_coefs = TRUE,
                            include_regression = TRUE,
-                           hierarchical_delta = TRUE) {
+                           hierarchical_delta = TRUE,
+                           include_ce_random_effects = FALSE) {
 
   formatted_data <- format_data_to_stan(
     data_long, response, time, unit, covars, treated_index,
@@ -227,7 +228,8 @@ fit_stan_model <- function(data_long,
     K_latent = num_latent,
     zap = FALSE,
     T_pos = 0,
-    hierarchical_delta = hierarchical_delta
+    hierarchical_delta = hierarchical_delta,
+    include_ce_random_effects = include_ce_random_effects
   ))
 
   if (!include_regression) {
