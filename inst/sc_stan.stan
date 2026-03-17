@@ -65,6 +65,7 @@ data {
   int<lower=0, upper=1> include_intercepts;
   int<lower=0, upper=1> include_time_coefs;
   int<lower=0, upper=1> include_unit_coefs;
+  int<lower=0, upper=1> include_ce_random_effects;
   int<lower=0, upper=1> zap;
   // ---------------------------------------------------------------------------
   
@@ -128,7 +129,6 @@ data {
   cov_matrix[N_treated] cov_eff_re_S;
 
   int<lower=0, upper=1> hierarchical_delta;
-  int<lower=0, upper=1> include_ce_random_effects;
 }
 
 transformed data {
@@ -232,7 +232,7 @@ parameters {
   // vector[total_treated] causal_effects_0;
 
   matrix[T_treated, num_re] ce_random_effs_0;
-  cov_matrix[num_re] cov_eff_re;
+  cov_matrix[include_ce_random_effects ? N_treated : 1] cov_eff_re;
 
   vector[T_treated] ce_mean_err;
   real ce_overall_mean;
@@ -355,7 +355,7 @@ transformed parameters {
     if(include_ce_random_effects) {
       theta[:,n] = causal_effects_prior_scale * ce_random_effs_0[:,n];
     } else {
-      theta[:,n] = rep_vector(0, T_treated)
+      theta[:,n] = rep_vector(0, T_treated);
     }
 
     delta[treated_time:T_times, treated_units[n]] = beta[:,n] * prop_treated[n] + theta[:,n];
@@ -430,11 +430,13 @@ model {
   }
 
   // New AR prior on treatment effects
-  for(t in 1:T_treated) {
-    ce_random_effs_0[t,:]' ~ multi_normal(rep_vector(0, N_treated), cov_eff_re);  
+  // New AR prior on treatment effects
+  if(include_ce_random_effects) {
+    for(t in 1:T_treated) {
+      ce_random_effs_0[t,:]' ~ multi_normal(rep_vector(0, N_treated), cov_eff_re);  
+    }
+    cov_eff_re ~ wishart(cov_eff_re_df, cov_eff_re_S_scaled);
   }
-  cov_eff_re ~ wishart(cov_eff_re_df, cov_eff_re_S_scaled);
-  
   // Rethink these
   ce_mean_err ~ normal(0, 1);
   ce_overall_mean ~ normal(0, 1);
