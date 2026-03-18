@@ -354,7 +354,7 @@ transformed parameters {
       );
     } else {
       ce_errs_n = ce_errs_0[:, n];
-      beta[:,n] = ar_process_centered(ce_errs_n, rep_vector(0, T_treated), autocor_ce, causal_effects_prior_scale * ce_sigma_0);
+      beta[:,n] = ar_process_centered(ce_errs_n, rep_vector(0, T_treated), autocor_ce, causal_effects_prior_scale * 1); //ce_sigma_0
     }
 
     if(include_ce_random_effects) {
@@ -441,6 +441,8 @@ model {
       ce_random_effs_0[t,:]' ~ multi_normal(rep_vector(0, N_treated), cov_eff_re);  
     }
     cov_eff_re ~ wishart(cov_eff_re_df, cov_eff_re_S_scaled);
+  } else {
+    to_vector(cov_eff_re) ~ std_normal();
   }
   // Rethink these
   ce_mean_err ~ normal(0, 1);
