@@ -474,7 +474,7 @@ generated quantities {
   // Estimates of the causal effects for each treated unit                                               
   matrix[T_times, N_treated] effs = max_Y_sd * delta[:, treated_units];
 
-  vector[T_times] ce_mean = ar_process_centered(
+  vector[T_treated] ce_mean = ar_process_centered(
     ce_mean_err, rep_vector(0, T_treated), autocor_ce, causal_effects_prior_scale * ce_sigma_0
   );
                   
