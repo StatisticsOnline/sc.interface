@@ -235,11 +235,12 @@ parameters {
   cov_matrix[include_ce_random_effects ? N_treated : 1] cov_eff_re;
 
   vector[T_treated] ce_mean_err;
-  real ce_overall_mean;
-  real<lower=0,upper=1> autocor_overall;
+  // real ce_overall_mean;
+  // real<lower=0,upper=1> autocor_overall;
 
   matrix[T_treated, N_treated] ce_errs_0;
-  vector<lower=0,upper=0.98>[N_treated] autocor_ce;
+  //vector<lower=0,upper=0.98>[N_treated] autocor_ce;
+  real<lower=0,upper=0.98> autocor_ce;
 
   real<lower=0> ce_sigma_overall_0;
   real<lower=0> ce_sigma_0;
@@ -336,7 +337,7 @@ transformed parameters {
   // vector[total_treated] causal_effects = causal_effects_prior_scale 
   //                                          * causal_effects_0;
 
-  vector[T_treated] ce_mean = ar_process_centered(ce_mean_err, rep_vector(causal_effects_prior_scale * ce_overall_mean, T_treated), autocor_overall, causal_effects_prior_scale * ce_sigma_overall_0);
+  // vector[T_treated] ce_mean = ar_process_centered(ce_mean_err, rep_vector(causal_effects_prior_scale * ce_overall_mean, T_treated), autocor_overall, causal_effects_prior_scale * ce_sigma_overall_0);
 
   // Vector of causal effects for unit n (identically 0 if unit n untreated).
   matrix[T_treated, N_units] beta;
@@ -344,12 +345,16 @@ transformed parameters {
 
   matrix[T_times, N_units] delta = rep_matrix(0, T_times, N_units);
   for(n in 1:N_treated) {
-    vector[T_treated] ce_errs_n = ce_errs_0[:, n];
+    vector[T_treated] ce_errs_n;
     
     if(hierarchical_delta) {
-      beta[:,n] = ar_process_centered(ce_errs_n, ce_mean, autocor_ce[n], causal_effects_prior_scale * ce_sigma_0);
+      ce_errs_n = ce_mean_err + causal_effects_prior_scale * ce_sigma_overall_0 * ce_errs_0[:, n];
+      beta[:,n] = ar_process_centered(
+        ce_errs_n, rep_vector(0, T_treated), autocor_ce, causal_effects_prior_scale * ce_sigma_0
+      );
     } else {
-      beta[:,n] = ar_process_centered(ce_errs_n, rep_vector(0, T_treated), autocor_ce[n], causal_effects_prior_scale * ce_sigma_0);
+      ce_errs_n = ce_errs_0[:, n];
+      beta[:,n] = ar_process_centered(ce_errs_n, rep_vector(0, T_treated), autocor_ce, causal_effects_prior_scale * ce_sigma_0);
     }
 
     if(include_ce_random_effects) {
@@ -439,7 +444,7 @@ model {
   }
   // Rethink these
   ce_mean_err ~ normal(0, 1);
-  ce_overall_mean ~ normal(0, 1);
+  //ce_overall_mean ~ normal(0, 1);
   to_vector(ce_errs_0) ~ normal(0, 1);
 
   ce_sigma_0 ~ normal(0, 1);
@@ -468,5 +473,9 @@ generated quantities {
 
   // Estimates of the causal effects for each treated unit                                               
   matrix[T_times, N_treated] effs = max_Y_sd * delta[:, treated_units];
+
+  vector[T_times] ce_mean = ar_process_centered(
+    ce_mean_err, rep_vector(0, T_treated), autocor_ce, causal_effects_prior_scale * ce_sigma_0
+  );
                   
 }
