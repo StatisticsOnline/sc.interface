@@ -55,7 +55,8 @@ run_sc <- function(
   stan_ad = 0.8,
   stan_mt = 11,
   include_covars = c("gs", "bp", "st"),
-  backends = c("gs", "bp", "st")
+  backends = c("gs", "bp", "st"),
+  include_ce_random_effects = FALSE
 ) {
 
   data[, panel_index[1]] <- as.factor(data[, panel_index[1]])
@@ -125,6 +126,7 @@ run_sc <- function(
       include_intercepts = TRUE,
       include_unit_coefs = TRUE,
       include_regression = ("st" %in% include_covars),
+      include_ce_random_effects = include_ce_random_effects,
       output_dir = "./"
     )
   } else {

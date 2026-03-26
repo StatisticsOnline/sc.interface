@@ -68,7 +68,7 @@ format_data_to_stan <- function(
   order_by_units <- function(names) {
     return(order(factor(names, levels = as.factor(unit_names))))
   }
-  prop_treated <- prop_treated[order_by_units(prop_treated)]
+  prop_treated <- prop_treated[order_by_units(names(prop_treated))]
   cov_names <- order_by_units(colnames(wishart_cov))
   wishart_cov <- wishart_cov[cov_names, cov_names, drop = FALSE]
 
