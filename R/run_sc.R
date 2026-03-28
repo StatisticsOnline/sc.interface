@@ -54,6 +54,7 @@ run_sc <- function(
   stan_iter = 2000,
   stan_ad = 0.8,
   stan_mt = 11,
+  stan_thin = 1,
   include_covars = c("gs", "bp", "st"),
   backends = c("gs", "bp", "st"),
   include_ce_random_effects = FALSE
@@ -123,6 +124,7 @@ run_sc <- function(
         ad = stan_ad, 
         mt = stan_mt
       ),
+      thin = stan_thin,
       include_intercepts = TRUE,
       include_unit_coefs = TRUE,
       include_regression = ("st" %in% include_covars),
